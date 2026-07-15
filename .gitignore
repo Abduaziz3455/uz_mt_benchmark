@@ -1,0 +1,5 @@
+__pycache__/
+*.py[cod]
+
+# fetched on demand from upstream (see ATTRIBUTION.md §4) — not redistributed
+data/eval/refsets/
