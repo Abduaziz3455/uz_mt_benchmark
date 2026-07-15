@@ -1,0 +1,24 @@
+# EN->UZ benchmark harness.
+#
+# torch must already be installed, as the CUDA build matching your driver
+# (e.g. cu124) — it is deliberately not pinned here.
+#
+# Do NOT install torchvision: this harness is text-only, and a torchvision that
+# mismatches torch breaks the transformers import chain
+# (ImportError: InterpolationMode). If present, remove it:
+#     pip uninstall -y torchvision
+
+transformers>=4.40.0          # NLLB + neuronai-uzbek
+accelerate>=0.30.0            # device_map="auto" in nllb_translator.py
+sentencepiece>=0.2.0          # NLLB / M2M100 tokenizer backend
+unbabel-comet>=2.2.0          # XCOMET-XL neural metric (QE + reference mode)
+google-genai>=0.3.0           # Gemini translation system + GEMBA-MQM judge
+openai>=1.30.0                # Ollama OpenAI-compatible endpoint (local + cloud)
+sacrebleu>=2.4.0              # chrF++ / spBLEU on the human refsets
+datasets>=2.19.0              # fetch FLORES-200 + turkic_xwmt
+huggingface_hub>=0.23.0       # gated-repo auth for XCOMET-XL / FLORES
+
+# Optional: stronger EN/UZ language-ID in the structural gates. Without it the
+# gates fall back to a stopword heuristic, which reproduces the shipped
+# structural.jsonl exactly.
+lingua-language-detector>=2.0
