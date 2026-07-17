@@ -129,7 +129,7 @@ Using all three neutralizes any single set's bias.
 
 ### 4.3 In-domain scoring is reference-free
 
-On the 600 call-agent segments there are no human references, and none are
+On the 600 customer-support dialogue segments there are no human references, and none are
 authored. The in-domain ranking — the decision that actually picks a translator —
 rests entirely on the reference-free backbone. This is the research-recommended
 approach for low-resource pairs where trustworthy references are scarce.
@@ -224,7 +224,7 @@ Gemini-independent; Gemini's own GEMBA-MQM row is flagged wherever it appears.
 ## 8. Known caveats
 
 - **Gemini self-judge bias** — anchored out via XCOMET-QE and the structural gates.
-- **Reference sets are formal-domain** (wiki/news/talks), not call-agent dialogue.
+- **Reference sets are formal-domain** (wiki/news/talks), not customer-support dialogue.
   Reference-based scores are a general EN→UZ signal plus metric validation; the
   in-domain ranking stays on reference-free QE over the 600 segments.
 - **FLORES favors NLLB** (its home benchmark) — mitigated by also using NTREX and

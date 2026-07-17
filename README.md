@@ -10,10 +10,12 @@ of that tells you how a system handles a *caller interrupting an agent mid-sente
 or whether it preserves the flight number `TR2704` and the time `9:35` verbatim.
 
 So this benchmark asks the question directly. It scores **9 systems** on **600
-novel, in-domain call-agent segments** with a reference-free neural metric, hard
+novel, in-domain customer-support dialogue segments** (banking, telecom, bookings,
+everyday chit-chat) with a reference-free neural metric, hard
 structural gates, and an out-of-domain human-reference cross-check.
 
 📊 **[LEADERBOARD.md](LEADERBOARD.md)** — the results
+🔍 **[EXAMPLES.md](EXAMPLES.md)** — worked side-by-side comparisons, one per failure class
 📐 **[METHODOLOGY.md](METHODOLOGY.md)** — why these metrics, and what they can't tell you
 ⚖️ **[ATTRIBUTION.md](ATTRIBUTION.md)** — data sources, licenses, and what you may do with the outputs
 
