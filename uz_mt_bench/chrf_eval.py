@@ -72,21 +72,39 @@ def main() -> None:
     out_path = Path(args.out_dir) / f"chrf_{args.refset}.jsonl"
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # Restrict to segments every system translated: NLLB ran on the full refset
+    # while the paid LLMs were capped, so per-system corpus scores over each
+    # system's own segments are not comparable (same rule as aggregate.py uses
+    # for reference-mode XCOMET).
+    sys_hyps = {f.stem: _load_hyps(f) for f in files}
+    sys_hyps = {s: h for s, h in sys_hyps.items() if h}
+    shared = [i for i in refs if all(i in h for h in sys_hyps.values())]
+    if not shared:
+        print(f"no segment is translated by every system in {cand_dir}")
+        return
+    dropped = {s: len(h) - len(shared) for s, h in sys_hyps.items() if len(h) > len(shared)}
+    if dropped:
+        print("restricted to shared segments; excluded per system: "
+              + ", ".join(f"{s} {n}" for s, n in sorted(dropped.items())))
+
     results = []
-    for f in files:
-        system = f.stem
-        hyps = _load_hyps(f)
-        ids = [i for i in refs if i in hyps]        # aligned, order-stable
-        if not ids:
-            continue
+    for system, hyps in sys_hyps.items():
+        ids = shared
         hyp_list = [hyps[i] for i in ids]
         ref_list = [refs[i] for i in ids]
         chrfpp = sacrebleu.corpus_chrf(hyp_list, [ref_list], word_order=2).score  # chrF++
         spbleu = sacrebleu.corpus_bleu(
             hyp_list, [ref_list], tokenize="flores200"
         ).score
+        # Corpus-level chrF/BLEU aggregate n-gram counts over all segments, so a
+        # single runaway output (e.g. a repetition loop hundreds of times the
+        # reference length) can sink the whole corpus score. Count such outputs
+        # so the table is never read without that context.
+        degenerate = sum(1 for h, r in zip(hyp_list, ref_list)
+                         if len(h) > 200 and len(h) > 3 * len(r))
         results.append({"system": system, "n": len(ids),
-                        "chrf_pp": round(chrfpp, 2), "spbleu": round(spbleu, 2)})
+                        "chrf_pp": round(chrfpp, 2), "spbleu": round(spbleu, 2),
+                        "degenerate": degenerate})
 
     results.sort(key=lambda r: -r["chrf_pp"])
     with out_path.open("w") as fh:

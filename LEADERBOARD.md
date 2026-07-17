@@ -22,6 +22,17 @@ Ranked by **XCOMET-QE (paired)** — the mean over the 595 segments every system
 | translategemma-12b | 600 | 0 | 0.9133 | 0.8653 | 0.7846 | 0.7843 | [0.7709, 0.7977] | 1.0 | 268/271/61 |
 | neuronai-uzbek | 600 | 0 | 0.7333 | 0.0387 | 0.2490 | 0.2486 | [0.2375, 0.2595] | 1.0 | 5/594/1 |
 
+### Significance among the top 5
+
+One-sided paired-bootstrap p-value that the **row** system beats the **column** system on XCOMET-QE over their shared segments (`*` = p<0.05). A cell without `*` means the pair is statistically indistinguishable here, whatever their order in the table above.
+
+| p(row > col) | gemma4-12b | gemma4-31b-cloud | gemini-3.5-flash | translategemma-27b |
+|---|---|---|---|---|
+| gemma4-26b | 0.195 | 0.052 | 0.025* | 0.032* |
+| gemma4-12b |  | 0.218 | 0.165 | 0.12 |
+| gemma4-31b-cloud |  |  | 0.39 | 0.34 |
+| gemini-3.5-flash |  |  |  | 0.418 |
+
 _**Empty-output robustness.** `gemma4-12b` 4, `gemma4-26b` 1 returned no translation for at least one segment. XCOMET cannot score an empty string, so those segments drop out of `XCOMET-QE (all)`. The `XCOMET-QE (paired)` column removes the bias by scoring every system on the same 595 segments._
 
 _Under the stricter assumption that an empty output scores 0.0 (a total adequacy failure rather than a missing datum), the order changes: `gemma4-12b` 2→3, `gemma4-31b-cloud` 3→2. The paired ranking above is therefore not robust to how empties are treated — prefer the system with both a high score and zero empties._
@@ -80,18 +91,50 @@ _Segments scored but excluded as not-shared: `gemini-3.5-flash` 11, `gemma4-12b`
 
 _Segments scored but excluded as not-shared: `gemini-3.5-flash` 17, `gemma4-12b` 5, `gemma4-26b` 12, `gemma4-31b-cloud` 17, `neuronai-uzbek` 17, `nllb-1.3b` 17, `nllb-3.3b` 17, `translategemma-12b` 17, `translategemma-27b` 17._
 
+**ntrex** (chrF++ / spBLEU)
+
+| system | n | chrF++ | spBLEU |
+|---|---|---|---|
+| gemini-3.5-flash | 487 | 48.9 | 25.61 |
+| gemma4-31b-cloud | 487 | 46.14 | 23.56 |
+| gemma4-26b | 487 | 45.85 | 24.11 |
+| translategemma-27b | 487 | 43.83 | 19.96 |
+| nllb-3.3b | 487 | 43.7 | 23.4 |
+| nllb-1.3b | 487 | 43.03 | 22.83 |
+| gemma4-12b | 487 | 42.92 | 20.74 |
+| translategemma-12b | 487 | 41.13 | 16.08 |
+| neuronai-uzbek | 487 | 17.21 | 0.55 |
+
+_⚠ Degenerate outputs (>3× reference length, e.g. repetition loops): `neuronai-uzbek` 194. chrF++/spBLEU aggregate n-gram counts over the whole corpus, so a single runaway output can sink a system's corpus score in a way the per-segment XCOMET mean does not — read the affected rows alongside the XCOMET-ref table above._
+
+**flores** (chrF++ / spBLEU)
+
+| system | n | chrF++ | spBLEU |
+|---|---|---|---|
+| gemini-3.5-flash | 483 | 56.09 | 34.12 |
+| gemma4-31b-cloud | 483 | 53.45 | 32.82 |
+| nllb-3.3b | 483 | 51.68 | 32.94 |
+| gemma4-12b | 483 | 51.23 | 30.98 |
+| nllb-1.3b | 483 | 51.23 | 32.06 |
+| translategemma-27b | 483 | 49.05 | 26.3 |
+| translategemma-12b | 483 | 45.44 | 20.89 |
+| gemma4-26b | 483 | 44.21 | 9.83 |
+| neuronai-uzbek | 483 | 17.66 | 0.57 |
+
+_⚠ Degenerate outputs (>3× reference length, e.g. repetition loops): `gemma4-26b` 1, `neuronai-uzbek` 223. chrF++/spBLEU aggregate n-gram counts over the whole corpus, so a single runaway output can sink a system's corpus score in a way the per-segment XCOMET mean does not — read the affected rows alongside the XCOMET-ref table above._
+
 ## Metric agreement
 
 Do the independent metrics agree? A weakly-calibrated metric on a low-resource language must be cross-checked, not trusted on its own.
 
 - **System-level QE-mean ↔ XCOMET-ref (refsets)** (n=9 systems): Pearson 0.9951. Reference-free and reference-based scoring agreeing on the system ranking is the strongest evidence the QE backbone is measuring translation quality.
+- **System-level QE-mean ↔ chrF++ (refsets)** (n=9 systems): Pearson 0.9715, Spearman 0.3833. chrF++ is a string metric — a metric family fully independent of the XCOMET backbone. Agreement here is the check the XCOMET-ref correlation (same model, two modes) cannot provide. Rank agreement is depressed by corpus-chrF's sensitivity to degenerate outputs (see the refset footnotes): `gemma4-26b`, `neuronai-uzbek` carry runaway outputs that sink their corpus scores.
 
 ## Not run in this release
 
 Planned in the methodology, absent from these numbers:
 
 - **GEMBA-MQM (Gemini judge)** — no `gemini_mqm_uz_mt_benchmark.jsonl`. The judge, the MQM win-rates, and the judge self-consistency check are absent from this release. Reproduce with `gemini_judge`.
-- **chrF++ / spBLEU** — no `chrf_<refset>.jsonl`. The string-metric cross-check did not run. Reproduce with `chrf_eval`.
 - **xwmt refset** — no `xcomet_ref_xwmt.jsonl`; that reference set was not scored.
 
 ## Caveats

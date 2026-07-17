@@ -1,0 +1,9 @@
+{"system": "gemini-3.5-flash", "n": 487, "chrf_pp": 48.9, "spbleu": 25.61, "degenerate": 0}
+{"system": "gemma4-31b-cloud", "n": 487, "chrf_pp": 46.14, "spbleu": 23.56, "degenerate": 0}
+{"system": "gemma4-26b", "n": 487, "chrf_pp": 45.85, "spbleu": 24.11, "degenerate": 0}
+{"system": "translategemma-27b", "n": 487, "chrf_pp": 43.83, "spbleu": 19.96, "degenerate": 0}
+{"system": "nllb-3.3b", "n": 487, "chrf_pp": 43.7, "spbleu": 23.4, "degenerate": 0}
+{"system": "nllb-1.3b", "n": 487, "chrf_pp": 43.03, "spbleu": 22.83, "degenerate": 0}
+{"system": "gemma4-12b", "n": 487, "chrf_pp": 42.92, "spbleu": 20.74, "degenerate": 0}
+{"system": "translategemma-12b", "n": 487, "chrf_pp": 41.13, "spbleu": 16.08, "degenerate": 0}
+{"system": "neuronai-uzbek", "n": 487, "chrf_pp": 17.21, "spbleu": 0.55, "degenerate": 194}

@@ -282,6 +282,8 @@ def build_report(scores_dir: Path, bench_path: Path, bench_tag: str,
         A(row)
     A()
 
+    _top_pair_significance(A, qe, ranked, boot_iters, rng)
+
     _empty_robustness(A, qe, qe_mean, paired_mean, structural, ranked, n_bench)
 
     # Long inputs beyond XCOMET's 512-subword window are invisible to the metric,
@@ -335,17 +337,31 @@ def build_report(scores_dir: Path, bench_path: Path, bench_tag: str,
               + ", ".join(f"`{s}` {n}" for s, n in sorted(dropped.items()) if n)
               + "._\n")
 
-    # legacy chrF++ tables, if that scorer was ever run
+    # chrF++ / spBLEU string-metric tables (chrf_eval restricts to shared segments)
+    chrf_means: dict[str, list[float]] = defaultdict(list)
+    chrf_deg: dict[str, int] = defaultdict(int)
     for rs in refsets:
         rows = _read_jsonl(scores_dir / f"chrf_{rs}.jsonl")
         if not rows:
             continue
+        for r in rows:
+            chrf_means[r["system"]].append(r["chrf_pp"])
         A(f"**{rs}** (chrF++ / spBLEU)\n")
         A("| system | n | chrF++ | spBLEU |")
         A("|---|---|---|---|")
         for r in sorted(rows, key=lambda x: -x["chrf_pp"]):
             A(f"| {r['system']} | {r['n']} | {r['chrf_pp']} | {r['spbleu']} |")
         A()
+        deg = {r["system"]: r["degenerate"] for r in rows if r.get("degenerate")}
+        for s, n in deg.items():
+            chrf_deg[s] += n
+        if deg:
+            A("_⚠ Degenerate outputs (>3× reference length, e.g. repetition loops): "
+              + ", ".join(f"`{s}` {n}" for s, n in sorted(deg.items()))
+              + ". chrF++/spBLEU aggregate n-gram counts over the whole corpus, so a "
+                "single runaway output can sink a system's corpus score in a way the "
+                "per-segment XCOMET mean does not — read the affected rows alongside "
+                "the XCOMET-ref table above._\n")
 
     # ---- metric agreement (meta-evaluation) ----
     A("## Metric agreement\n")
@@ -359,6 +375,22 @@ def build_report(scores_dir: Path, bench_path: Path, bench_tag: str,
           f"Pearson {_pearson([qe_mean[s] for s in common_r], [ref_avg[s] for s in common_r])}. "
           "Reference-free and reference-based scoring agreeing on the system ranking is "
           "the strongest evidence the QE backbone is measuring translation quality.")
+
+    chrf_avg = {s: sum(v) / len(v) for s, v in chrf_means.items()}
+    common_c = [s for s in qe_mean if s in chrf_avg and qe_mean[s] is not None]
+    if len(common_c) >= 2:
+        qe_v = [qe_mean[s] for s in common_c]
+        ch_v = [chrf_avg[s] for s in common_c]
+        A(f"- **System-level QE-mean ↔ chrF++ (refsets)** (n={len(common_c)} systems): "
+          f"Pearson {_pearson(qe_v, ch_v)}, Spearman {_spearman(qe_v, ch_v)}. "
+          "chrF++ is a string metric — a metric family fully independent of the "
+          "XCOMET backbone. Agreement here is the check the XCOMET-ref correlation "
+          "(same model, two modes) cannot provide."
+          + ((" Rank agreement is depressed by corpus-chrF's sensitivity to "
+              "degenerate outputs (see the refset footnotes): "
+              + ", ".join(f"`{s}`" for s in sorted(chrf_deg))
+              + " carry runaway outputs that sink their corpus scores.")
+             if chrf_deg else ""))
 
     MIN_CORR_N = 30
     if has_mqm:
@@ -416,6 +448,37 @@ def build_report(scores_dir: Path, bench_path: Path, bench_tag: str,
       "native-speaker MQM spot-check of the top systems would confirm it — the one "
       "check no code substitutes for, on a low-resource language.")
     return "\n".join(L)
+
+
+def _top_pair_significance(A, qe, ranked, boot_iters, rng, k: int = 5) -> None:
+    """Pairwise paired-bootstrap p-values among the top-k systems.
+
+    `p(base)` only tests each system against the baseline, yet the table's visual
+    ordering implies distinctions among the leaders that the baseline test never
+    examines. This matrix makes those comparisons explicit: cells without `*` are
+    statistical ties at this sample size, and the leaderboard order within such a
+    pair is by point estimate only.
+    """
+    top = [s for s in ranked[:k] if s in qe]
+    if len(top) < 2:
+        return
+    A(f"### Significance among the top {len(top)}\n")
+    A("One-sided paired-bootstrap p-value that the **row** system beats the "
+      "**column** system on XCOMET-QE over their shared segments (`*` = p<0.05). "
+      "A cell without `*` means the pair is statistically indistinguishable here, "
+      "whatever their order in the table above.\n")
+    A("| p(row > col) | " + " | ".join(top[1:]) + " |")
+    A("|---|" + "|".join(["---"] * (len(top) - 1)) + "|")
+    for i, a in enumerate(top[:-1]):
+        cells = []
+        for j, b in enumerate(top[1:], start=1):
+            if j <= i:
+                cells.append("")
+                continue
+            p = _paired_bootstrap_p(qe[a], qe[b], boot_iters, rng)
+            cells.append("—" if p is None else (f"{p}*" if p < 0.05 else f"{p}"))
+        A(f"| {a} | " + " | ".join(cells) + " |")
+    A()
 
 
 def _empty_robustness(A, qe, qe_mean, paired_mean, structural, ranked, n_bench) -> None:
