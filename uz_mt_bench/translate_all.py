@@ -24,11 +24,56 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import time
 import traceback
 from pathlib import Path
 
 from .systems import build_system, resolve_keys
+
+
+def _fmt_eta(seconds: float) -> str:
+    if seconds < 0 or seconds != seconds or seconds == float("inf"):
+        return "--:--"
+    m, s = divmod(int(seconds), 60)
+    return f"{m}:{s:02d}" if m < 60 else f"{m // 60}:{m % 60:02d}:{s:02d}"
+
+
+class _Progress:
+    """Single-line live progress on a TTY, periodic log lines otherwise.
+
+    Redirecting to a file (nohup, CI) shouldn't produce thousands of \\r-joined
+    fragments, so non-TTY output falls back to the previous every-N behaviour.
+    """
+
+    def __init__(self, key: str, total: int, report_every: int):
+        self.key, self.total, self.every = key, total, report_every
+        self.tty = sys.stdout.isatty()
+        self.t0 = time.monotonic()
+
+    def update(self, i: int, ok: int, err: int) -> None:
+        elapsed = time.monotonic() - self.t0
+        rate = i / elapsed if elapsed else 0.0
+        eta = (self.total - i) / rate if rate else float("inf")
+        pct = i / self.total
+        if self.tty:
+            fill = int(24 * pct)
+            bar = "█" * fill + "·" * (24 - fill)
+            line = (
+                f"  [{self.key}] {bar} {i}/{self.total} ({pct:5.1%}) "
+                f"ok={ok} err={err} {rate:4.1f}/s ETA {_fmt_eta(eta)}"
+            )
+            print(f"\r{line:<100}", end="", flush=True)
+        elif i % self.every == 0 or i == self.total:
+            print(
+                f"  [{self.key}] {i}/{self.total} ok={ok} err={err} "
+                f"{rate:.1f}/s ETA {_fmt_eta(eta)}",
+                flush=True,
+            )
+
+    def close(self) -> None:
+        if self.tty:
+            print(flush=True)
 
 
 def _load_input(path: Path) -> list[dict]:
@@ -77,7 +122,8 @@ def run_system(key: str, records: list[dict], out_path: Path, report_every: int)
         return
 
     system = build_system(key)          # lazy backend init happens on first call
-    ok, err, t0 = 0, 0, time.monotonic()
+    ok, err = 0, 0
+    prog = _Progress(key, len(todo), report_every)
     with out_path.open("a") as fh:
         for i, rec in enumerate(todo, 1):
             row = {"id": rec["id"], "system": key}
@@ -98,12 +144,13 @@ def run_system(key: str, records: list[dict], out_path: Path, report_every: int)
                 row["error"] = f"{type(exc).__name__}: {exc}"
                 err += 1
                 if err <= 3:
+                    if prog.tty:
+                        print()             # don't smear the traceback onto the bar
                     traceback.print_exc()
             fh.write(json.dumps(row, ensure_ascii=False) + "\n")
             fh.flush()
-            if i % report_every == 0:
-                rate = i / (time.monotonic() - t0)
-                print(f"  [{key}] {i}/{len(todo)}  ok={ok} err={err}  {rate:.1f}/s")
+            prog.update(i, ok, err)
+    prog.close()
     print(f"  [{key}] finished: ok={ok} err={err}")
 
 

@@ -11,20 +11,50 @@ Serving (see METHODOLOGY.md §2):
   - gemma4:31b-cloud ....... Ollama Cloud (ollama.com/v1, OLLAMA_API_KEY)
   - translategemma 12b/27b . local Ollama
   - gemini-3.5-flash ....... Google GenAI (GEMINI_API_KEY), minimal thinking
+  - tilmoch ................ Tahrirchi translate-v2 HTTP API (TILMOCH_KEY)
 
 Env: OLLAMA_LOCAL_URL (default http://localhost:11434/v1), OLLAMA_CLOUD_URL
-(default https://ollama.com/v1), OLLAMA_API_KEY (cloud), GEMINI_API_KEY.
+(default https://ollama.com/v1), OLLAMA_API_KEY (cloud), GEMINI_API_KEY,
+TILMOCH_KEY. Keys may live in a .env at the repo root — see _env().
 """
 
 from __future__ import annotations
 
+import json
 import os
 import re
+import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from .nllb_translator import NllbTranslator, normalize_uz
 
 _STRIP_THINK = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
+_ENV_FILE_CACHE: dict[str, str] | None = None
+
+
+def _env(name: str) -> str | None:
+    """os.environ, falling back to a KEY=value .env at the repo root.
+
+    The process environment always wins, so `KEY=... python -m ...` still
+    overrides the file. Nothing here is exported back into os.environ.
+    """
+    global _ENV_FILE_CACHE
+    if name in os.environ:
+        return os.environ[name]
+    if _ENV_FILE_CACHE is None:
+        _ENV_FILE_CACHE = {}
+        path = Path(__file__).resolve().parent.parent / ".env"
+        if path.exists():
+            for line in path.read_text().splitlines():
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                _ENV_FILE_CACHE[k.strip()] = v.strip().strip("'\"")
+    return _ENV_FILE_CACHE.get(name)
 # HF generation config for the small Uzbek-tuned models (mirrors model_eval.py:
 # greedy + repetition guards keep 4-8B models from looping).
 HF_MAX_NEW = 256
@@ -153,6 +183,88 @@ class GeminiSystem(System):
         return normalize_uz((resp.text or "").strip())
 
 
+# ── Tilmoch (Tahrirchi translate-v2 HTTP API) ────────────────────────────────
+TILMOCH_URL = "https://websocket.tahrirchi.uz/translate-v2"
+TILMOCH_SRC, TILMOCH_TGT = "eng_Latn", "uzn_Latn"
+TILMOCH_MAX_CHARS = 5000            # documented per-request cap
+TILMOCH_RPM = 50                    # documented rate limit (requests/minute)
+TILMOCH_RETRIES = 4
+TILMOCH_TIMEOUT = 60
+
+
+class TilmochSystem(System):
+    """Tahrirchi's Tilmoch/Sayqalchi endpoint — a dedicated MT service.
+
+    Like NLLB this is a translation model, not a chat model: there is no prompt
+    and the API has no context field, so `context` is ignored (the fixed LLM
+    prompt is not applicable and would be billed as input characters).
+
+    Billing is per source character, so the client paces itself to the
+    documented 50 req/min rather than discovering the limit via 429s.
+    """
+
+    def __init__(self, key: str, model: str = "tilmoch"):
+        self.key = key
+        self._model = model
+        self._api_key: str | None = None
+        self._next_at = 0.0
+
+    def _lazy_key(self) -> str:
+        if self._api_key is None:
+            k = _env("TILMOCH_KEY")
+            if not k:
+                raise RuntimeError(
+                    "TILMOCH_KEY required for the Tilmoch system "
+                    "(export it, or put TILMOCH_KEY=... in the repo-root .env)"
+                )
+            self._api_key = k
+        return self._api_key
+
+    def _throttle(self) -> None:
+        wait = self._next_at - time.monotonic()
+        if wait > 0:
+            time.sleep(wait)
+        self._next_at = time.monotonic() + 60.0 / TILMOCH_RPM
+
+    def translate(self, text: str, context: str | None = None) -> str:
+        if len(text) > TILMOCH_MAX_CHARS:
+            raise ValueError(
+                f"segment is {len(text)} chars, over the {TILMOCH_MAX_CHARS} cap"
+            )
+        body = json.dumps(
+            {
+                "text": text,
+                "source_lang": TILMOCH_SRC,
+                "target_lang": TILMOCH_TGT,
+                "model": self._model,
+            }
+        ).encode()
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": self._lazy_key(),
+        }
+
+        last: Exception | None = None
+        for attempt in range(TILMOCH_RETRIES):
+            self._throttle()
+            req = urllib.request.Request(TILMOCH_URL, data=body, headers=headers)
+            try:
+                with urllib.request.urlopen(req, timeout=TILMOCH_TIMEOUT) as resp:
+                    payload = json.loads(resp.read().decode())
+                return normalize_uz((payload.get("translated_text") or "").strip())
+            except urllib.error.HTTPError as exc:
+                # 4xx other than 429 is a bad request/key — retrying just burns money
+                if exc.code != 429 and exc.code < 500:
+                    raise RuntimeError(
+                        f"Tilmoch HTTP {exc.code}: {exc.read().decode()[:200]}"
+                    ) from exc
+                last = exc
+            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+                last = exc
+            time.sleep(2 ** attempt)        # 1s, 2s, 4s
+        raise RuntimeError(f"Tilmoch failed after {TILMOCH_RETRIES} attempts: {last}")
+
+
 # ── HF causal LM (local, Uzbek-tuned models: NeuronAI-Uzbek, behbudiy) ────────
 class HFLocalSystem(System):
     """Local HuggingFace causal LM used through its chat template.
@@ -227,10 +339,12 @@ SPECS: list[Spec] = [
     Spec("gemini-3.5-flash", "gemini", GEMINI_MODEL),
     # Uzbek-specialized HF causal LM
     Spec("neuronai-uzbek", "hf_local", "NeuronUz/NeuronAI-Uzbek"),
+    # Uzbek-specialized commercial MT API (paid, per source character)
+    Spec("tilmoch", "tilmoch", "tilmoch"),
 ]
 
 SPEC_BY_KEY = {s.key: s for s in SPECS}
-QUALITY_BOARD = [s.key for s in SPECS]                       # all 9
+QUALITY_BOARD = [s.key for s in SPECS]                       # all 10
 
 
 def _ollama_local_url() -> str:
@@ -257,6 +371,8 @@ def build_system(key: str) -> System:
         return GeminiSystem(key, spec.model)
     if spec.kind == "hf_local":
         return HFLocalSystem(key, spec.model)
+    if spec.kind == "tilmoch":
+        return TilmochSystem(key, spec.model)
     raise ValueError(f"unknown system kind {spec.kind!r}")
 
 
