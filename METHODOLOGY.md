@@ -40,7 +40,7 @@ Results: [LEADERBOARD.md](LEADERBOARD.md). Running it: [README.md](README.md).
 
 **Design consequence.** The **reference-free backbone** — XCOMET-QE + GEMBA-MQM +
 structural gates — decides the in-domain ranking, needs no golden set, and covers
-all 9 systems. Reference-based scoring runs only on **external human refsets**, as
+all 10 systems. Reference-based scoring runs only on **external human refsets**, as
 a cross-check on the metric rather than as the decision.
 
 ---
@@ -60,6 +60,7 @@ Nine systems behind one `translate(text, context=None) -> str` interface.
 | 7 | `translategemma:27b` | TranslateGemma (MT-tuned) | local Ollama | quantized |
 | 8 | `gemini-3.5-flash` | Gemini (LLM) | Google API | minimal thinking; **also the judge** — see [§6.3](#63-conflict-of-interest-gemini-is-both-a-system-and-the-judge) |
 | 9 | `neuronai-uzbek` | Uzbek-specialized (Qwen3-4B FT) | local HF | `NeuronUz/NeuronAI-Uzbek`; chat template, greedy + repetition guards |
+| 10 | `tilmoch` | Tahrirchi Tilmoch (Uzbek MT service) | commercial API | `translate-v2`, `eng_Latn`→`uzn_Latn`; no prompt and no context field, called with the bare segment; billed per source character, so scored **in-domain only** |
 
 ### 2.1 Fixed translation prompt (all LLM systems)
 
@@ -163,7 +164,7 @@ The shipped `structural.jsonl` reproduces exactly under the fallback.
 ### 6.1 XCOMET-QE (primary, reference-free)
 
 `Unbabel/XCOMET-XL` (3.5B) in QE mode: score each `(en_text, uz_text)` pair 0-1
-with no reference, across all 9 systems × 600 segments. GPU, batched.
+with no reference, across all 10 systems × 600 segments. GPU, batched.
 
 **Long-segment chunking.** XCOMET's XLM-R encoder truncates at 512 subword tokens.
 Anything past the cut is invisible to the metric, so a long-but-correct translation

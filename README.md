@@ -9,7 +9,7 @@ has been public long enough that every large LLM has probably trained on it. Non
 of that tells you how a system handles a *caller interrupting an agent mid-sentence*,
 or whether it preserves the flight number `TR2704` and the time `9:35` verbatim.
 
-So this benchmark asks the question directly. It scores **9 systems** on **600
+So this benchmark asks the question directly. It scores **10 systems** on **600
 novel, in-domain customer-support dialogue segments** (banking, telecom, bookings,
 everyday chit-chat) with a reference-free neural metric, hard
 structural gates, and an out-of-domain human-reference cross-check.
@@ -41,11 +41,13 @@ A system that scores well but silently drops `TR2704` is disqualified for a
 call agent regardless of how fluent it sounds — which is why the gates are
 reported next to the score, not folded into it.
 
-**2. Out-of-domain sanity check (metric validation).** The same 9 systems on
+**2. Out-of-domain sanity check (metric validation).** Nine of the ten systems on
 **NTREX-128** and **FLORES-200**, scored by XCOMET-XL in *reference* mode against
 professional human translations. This exists to answer "is the reference-free
 metric measuring anything real?" — and it does: reference-free and reference-based
-scoring agree on the system ranking at Pearson **0.995**.
+scoring agree on the system ranking at Pearson **0.995**. `tilmoch` is a paid
+per-character API and was purchased for the in-domain set only, so it is absent
+from this cross-check; its in-domain score stands on the same footing as the rest.
 
 ## Systems under test
 
@@ -58,42 +60,42 @@ scoring agree on the system ranking at Pearson **0.995**.
 | `translategemma-12b` / `translategemma-27b` | TranslateGemma (MT-tuned) | local Ollama |
 | `gemini-3.5-flash` | Gemini (LLM) | Google API |
 | `neuronai-uzbek` | Uzbek-specialised Qwen3-4B FT | local HF |
+| `tilmoch` | Tahrirchi Tilmoch (Uzbek MT service) | commercial API — paid |
 
 Every LLM system gets the **same fixed translation prompt** at temperature 0;
-NLLB uses beam 4. See [`uz_mt_bench/systems.py`](uz_mt_bench/systems.py).
+NLLB uses beam 4. `tilmoch`, like NLLB, is a dedicated MT service with no prompt
+and no context parameter, so it is called with the bare source segment. See
+[`uz_mt_bench/systems.py`](uz_mt_bench/systems.py).
 
 ---
 
-## ⚠ Status of the current numbers
+## Status of the current numbers
 
-The leaderboard in this repo was produced by a scoring run that ran **without
-long-segment chunking**. XCOMET's encoder truncates at 512 subword tokens, so the
-56 segments longer than ~80 words were cut off mid-input, which floors their score
-for *every* system and compresses the gaps between systems. The `kb_passage`
-column is the visible casualty.
+Long-segment chunking is applied: 560 of 5,995 scored (system, segment) pairs were
+sentence-aligned into multiple chunks, so XCOMET's 512-subword-token window never
+truncates a long `kb_passage` mid-input. Every row in the score file carries
+`n_chunks`, and `aggregate.py` derives the leaderboard's chunking note from the
+score file itself, so it cannot go stale.
 
-Chunking is now the default in `comet_qe.py`. **Re-run the QE scoring step and
-regenerate the leaderboard before citing these numbers**:
+Two gaps remain, both stated in the leaderboard's **Not run in this release**
+section: the **GEMBA-MQM judge** never completed (its output was a handful of
+malformed-JSON rows and is not shipped), and the **turkic_xwmt** refset was never
+scored. The harness for both ships here; the results do not.
+
+Reproduce the scoring and regenerate the published artifacts with:
 
 ```bash
-python -m uz_mt_bench.comet_qe      # ~20 min on an A100; chunking is on by default
-python -m uz_mt_bench.aggregate     # rewrites LEADERBOARD.md
+python -m uz_mt_bench.comet_qe            # XCOMET-QE; chunking on by default
+python -m uz_mt_bench.structural_checks   # structural gates
+python -m uz_mt_bench.aggregate           # rewrites LEADERBOARD.md
+python -m uz_mt_bench.make_leaderboard_png  # rewrites leaderboard.png
 ```
-
-The ⚠ banner in `LEADERBOARD.md` disappears once the scores carry `n_chunks`.
-`aggregate.py` derives that banner from the score file itself, so it cannot go
-stale.
-
-Two further gaps, both stated in the leaderboard's **Not run in this release**
-section: the **GEMBA-MQM judge** never completed (its output was a handful of
-malformed-JSON rows and is not shipped), and **chrF++** and the **turkic_xwmt**
-refset were never run. The harness for all three ships here; the results do not.
 
 ---
 
 ## Reproducing
 
-Everything below runs from this directory. The 600-segment benchmark, all 9
+Everything below runs from this directory. The 600-segment benchmark, all 10
 systems' translations, and the score files are **included**, so you can re-derive
 the leaderboard without a GPU or an API key:
 
@@ -123,6 +125,7 @@ huggingface-cli login          # XCOMET-XL and FLORES-200 are gated repos
 ```bash
 export GEMINI_API_KEY=...       # gemini-3.5-flash (system + judge)
 export OLLAMA_API_KEY=...       # gemma4:31b-cloud only
+export TILMOCH_KEY=...          # tilmoch — billed per source character
 
 ollama serve &
 ollama pull gemma4:12b && ollama pull gemma4:26b
@@ -150,7 +153,7 @@ python -m uz_mt_bench.structural_checks \
     --candidates data/eval/candidates/uz_mt_benchmark.smoke
 ```
 
-**5. Translate** all 9 systems (resumable — re-run after an OOM or rate-limit and
+**5. Translate** all 10 systems (resumable — re-run after an OOM or rate-limit and
 it skips finished rows):
 
 ```bash
@@ -164,8 +167,14 @@ python -m uz_mt_bench.structural_checks     # hard gates      (CPU)
 python -m uz_mt_bench.comet_qe              # XCOMET-QE       (GPU)
 python -m uz_mt_bench.gemini_judge          # GEMBA-MQM ×3    (API)
 
+# `tilmoch` is billed per source character and was bought for the in-domain set
+# only, so it is named out of the refset sweep — `--systems all` would spend real
+# money here (~3k segments × 3 refsets).
+FREE=nllb-1.3b,nllb-3.3b,gemma4-12b,gemma4-26b,gemma4-31b-cloud,\
+translategemma-12b,translategemma-27b,gemini-3.5-flash,neuronai-uzbek
+
 for RS in ntrex flores xwmt; do
-  python -m uz_mt_bench.translate_all --input data/eval/refsets/$RS.jsonl
+  python -m uz_mt_bench.translate_all --input data/eval/refsets/$RS.jsonl --systems $FREE
   python -m uz_mt_bench.comet_qe \
       --bench data/eval/refsets/$RS.jsonl --candidates data/eval/candidates/$RS --reference
   python -m uz_mt_bench.chrf_eval --refset $RS
@@ -175,7 +184,8 @@ done
 **7. Build the leaderboard.**
 
 ```bash
-python -m uz_mt_bench.aggregate
+python -m uz_mt_bench.aggregate             # rewrites LEADERBOARD.md
+python -m uz_mt_bench.make_leaderboard_png  # rewrites leaderboard.png (needs Chrome)
 ```
 
 `aggregate.py` reports only what it finds. A metric whose score file is absent is
@@ -201,7 +211,7 @@ and the Ollama-Cloud 31B model.
 uz_mt_bench/
   build_benchmark.py     # sample + stratify the 600 in-domain segments
   fetch_refsets.py       # download NTREX / FLORES / turkic_xwmt
-  systems.py             # the 9 systems behind one translate() interface
+  systems.py             # the 10 systems behind one translate() interface
   preflight.py           # check every system responds before a paid run
   translate_all.py       # generate candidates          -> data/eval/candidates/
   structural_checks.py   # hard gates                   -> scores/structural.jsonl

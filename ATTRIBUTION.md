@@ -55,7 +55,7 @@ corpus, which is **not** shipped here. The 600 sampled segments are.
 
 ## 3. The candidate translations (`data/eval/candidates/`)
 
-Machine-translated Uzbek output from nine systems. **Each system's output inherits
+Machine-translated Uzbek output from ten systems. **Each system's output inherits
 that model's license**, which is not the license of the source text.
 
 | System | Model | Output license / terms |
@@ -65,6 +65,11 @@ that model's license**, which is not the license of the source text.
 | `translategemma-12b`, `translategemma-27b` | TranslateGemma | [Gemma Terms of Use](https://ai.google.dev/gemma/terms) |
 | `gemini-3.5-flash` | Gemini | [Google APIs Terms of Service](https://developers.google.com/terms) |
 | `neuronai-uzbek` | [NeuronUz/NeuronAI-Uzbek](https://huggingface.co/NeuronUz/NeuronAI-Uzbek) | see the model card |
+| `tilmoch` | Tahrirchi Tilmoch (hosted API, no public weights) | governed by Tahrirchi's API terms — check your account agreement |
+
+`tilmoch` was run on the in-domain benchmark only (it is billed per source
+character), so `data/eval/candidates/ntrex/` and `.../flores/` contain no
+`tilmoch.jsonl`.
 
 > **The NLLB rows are non-commercial.** NLLB-200's weights are CC-BY-NC-4.0 and its
 > output inherits that restriction. Any corpus translated with `nllb-1.3b` or
