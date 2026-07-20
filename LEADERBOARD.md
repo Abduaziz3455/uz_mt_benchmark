@@ -18,9 +18,10 @@ Ranked by **XCOMET-QE (paired)** — the mean over the 595 segments every system
 | gemini-3.5-flash | 600 | 0 | 0.9567 | 0.8957 | 0.8184 | 0.8174 | [0.8054, 0.8297] | 0.0* | 309/220/71 |
 | translategemma-27b | 600 | 0 | 0.9300 | 0.8533 | 0.8171 | 0.8163 | [0.8032, 0.8291] | 0.0* | 317/220/63 |
 | nllb-3.3b | 600 | 0 | 0.9467 | 0.9180 | 0.8011 | 0.8000 | [0.7879, 0.8145] | 0.027* | 259/220/121 |
-| nllb-1.3b | 600 | 0 | 0.9467 | 0.8930 | 0.7917 | 0.7900 | [0.7764, 0.8034] | baseline | baseline |
-| translategemma-12b | 600 | 0 | 0.9133 | 0.8653 | 0.7846 | 0.7843 | [0.7709, 0.7977] | 1.0 | 268/271/61 |
-| neuronai-uzbek | 600 | 0 | 0.7333 | 0.0387 | 0.2490 | 0.2486 | [0.2375, 0.2595] | 1.0 | 5/594/1 |
+| tilmoch | 600 | 0 | 0.9517 | 0.9100 | 0.7980 | 0.7972 | [0.7846, 0.8094] | 0.09 | 267/249/84 |
+| nllb-1.3b | 600 | 0 | 0.9467 | 0.8930 | 0.7917 | 0.7900 | [0.7752, 0.8034] | baseline | baseline |
+| translategemma-12b | 600 | 0 | 0.9133 | 0.8653 | 0.7846 | 0.7843 | [0.7708, 0.798] | 1.0 | 268/271/61 |
+| neuronai-uzbek | 600 | 0 | 0.7333 | 0.0387 | 0.2490 | 0.2486 | [0.238, 0.261] | 1.0 | 5/594/1 |
 
 ### Significance among the top 5
 
@@ -28,16 +29,16 @@ One-sided paired-bootstrap p-value that the **row** system beats the **column** 
 
 | p(row > col) | gemma4-12b | gemma4-31b-cloud | gemini-3.5-flash | translategemma-27b |
 |---|---|---|---|---|
-| gemma4-26b | 0.195 | 0.052 | 0.025* | 0.032* |
-| gemma4-12b |  | 0.218 | 0.165 | 0.12 |
-| gemma4-31b-cloud |  |  | 0.39 | 0.34 |
-| gemini-3.5-flash |  |  |  | 0.418 |
+| gemma4-26b | 0.201 | 0.042* | 0.028* | 0.027* |
+| gemma4-12b |  | 0.214 | 0.161 | 0.107 |
+| gemma4-31b-cloud |  |  | 0.4 | 0.309 |
+| gemini-3.5-flash |  |  |  | 0.415 |
 
 _**Empty-output robustness.** `gemma4-12b` 4, `gemma4-26b` 1 returned no translation for at least one segment. XCOMET cannot score an empty string, so those segments drop out of `XCOMET-QE (all)`. The `XCOMET-QE (paired)` column removes the bias by scoring every system on the same 595 segments._
 
 _Under the stricter assumption that an empty output scores 0.0 (a total adequacy failure rather than a missing datum), the order changes: `gemma4-12b` 2→3, `gemma4-31b-cloud` 3→2. The paired ranking above is therefore not robust to how empties are treated — prefer the system with both a high score and zero empties._
 
-_Long-segment chunking active: 504 of 5395 scored (system, segment) pairs were sentence-aligned into multiple chunks so XCOMET's 512-token window never truncates them._
+_Long-segment chunking active: 560 of 5995 scored (system, segment) pairs were sentence-aligned into multiple chunks so XCOMET's 512-token window never truncates them._
 
 ### XCOMET-QE by category
 
@@ -50,6 +51,7 @@ _Long-segment chunking active: 504 of 5395 scored (system, segment) pairs were s
 | neuronai-uzbek | 0.237 | 0.308 | 0.250 | 0.185 | 0.248 |
 | nllb-1.3b | 0.819 | 0.851 | 0.765 | 0.676 | 0.842 |
 | nllb-3.3b | 0.851 | 0.844 | 0.770 | 0.695 | 0.851 |
+| tilmoch | 0.828 | 0.842 | 0.759 | 0.720 | 0.846 |
 | translategemma-12b | 0.827 | 0.827 | 0.761 | 0.687 | 0.827 |
 | translategemma-27b | 0.849 | 0.850 | 0.797 | 0.745 | 0.845 |
 
